@@ -175,6 +175,28 @@ textarea.inp{resize:vertical;min-height:60px}
   .fin div:first-child{border-top:0}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.01ms!important}}
+
+/* Module cards home */
+.mod-wrap{max-width:900px;margin:0 auto;padding:32px 20px 60px}
+.mod-head{margin:0 0 24px}
+.mod-head h1{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.mod-head p{margin:0;color:var(--muted);font-size:13.5px}
+.mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.mod-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s,transform .1s;text-align:left;font:inherit;color:inherit}
+.mod-card:hover{border-color:var(--line-strong)}
+.mod-card:active{transform:scale(.99)}
+.mod-card .mod-icon{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;margin-bottom:14px}
+.mod-card .mod-icon .ic{width:22px;height:22px}
+.mod-card h3{margin:0 0 3px;font-size:15.5px;font-weight:600}
+.mod-card p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5}
+.mod-card .mod-count{position:absolute;top:16px;right:16px;min-width:28px;text-align:center;font-size:13px;font-weight:700;color:var(--ink);background:var(--col);padding:3px 10px;border-radius:20px;font-variant-numeric:tabular-nums}
+.mod-card .mod-val{margin-top:10px;font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.mod-summary{display:flex;flex-wrap:wrap;gap:14px 28px;margin-bottom:24px;padding:16px 20px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.mod-summary .stat .n{display:block;font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.mod-summary .stat .t{display:block;margin-top:2px;color:var(--muted);font-size:12.5px}
+.back-btn{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;border:0;background:none;color:var(--accent);font-weight:500;font-size:13.5px;cursor:pointer;padding:4px 0}
+.back-btn:hover{text-decoration:underline}
+.back-btn .ic{width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -271,6 +293,8 @@ const ICONS = {
   up:<polyline points="18 15 12 9 6 15"/>,
   down:<polyline points="6 9 12 15 18 9"/>,
   layout:<><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></>,
+  receipt:<><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></>,
+  home:<><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></>,
 };
 function Ic({ n }) {
   return <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">{ICONS[n]}</svg>;
@@ -332,6 +356,22 @@ function download(blob, name) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+/* ---------- Módulos (agrupamento visual) ---------- */
+const MODULE_GROUPS = [
+  { key:"comercial",   nome:"Comercial",   desc:"Propostas comerciais e orçamentos",    icon:"quote",    bg:"#FFFBEB", fg:"#92400E", match: id => id === "proposta" },
+  { key:"producao",    nome:"Produção",    desc:"Pedidos pendentes e em confecção",      icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: id => id === "pendente" || id === "confeccao" },
+  { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: id => id === "entrega" || id === "entregue" },
+  { key:"faturamento", nome:"Faturamento", desc:"Faturamento e pedidos faturados",       icon:"receipt",  bg:"#F5F3FF", fg:"#5B21B6", match: id => /fatur/i.test(id) },
+];
+function getModuleStages(moduleKey, allStages) {
+  const mod = MODULE_GROUPS.find(m => m.key === moduleKey);
+  if (!mod) return allStages;
+  return allStages.filter(s => mod.match(s.id));
+}
+function getUnmatchedStages(allStages) {
+  return allStages.filter(s => !MODULE_GROUPS.some(m => m.match(s.id)));
+}
+
 /* ---------- Aplicativo ---------- */
 function App() {
   const [orders, setOrders] = useState([]);
@@ -351,6 +391,7 @@ function App() {
   const [showStages, setShowStages] = useState(false);
   const [fieldsRaw, setFieldsRaw] = useState(DEFAULT_FIELDS);
   const [showFields, setShowFields] = useState(false);
+  const [view, setView] = useState("modules"); // "modules" or module key
   const fileRef = useRef(null);
 
   const stagesFlow = React.useMemo(() => stagesRaw.map((s, i) => ({
@@ -606,12 +647,22 @@ function App() {
     </div>
   );
 
+  /* ----- Módulos: dados por grupo ----- */
+  const activeModule = view !== "modules" ? MODULE_GROUPS.find(m => m.key === view) : null;
+  const viewStages = activeModule ? getModuleStages(view, stagesRaw) : stagesRaw;
+  const viewStagesFlow = activeModule ? stagesFlow.filter(s => activeModule.match(s.id)) : stagesFlow;
+  const moduleOrderCount = (mod) => orders.filter(o => mod.match(o.status)).length;
+  const moduleOrderVal = (mod) => sumVal(orders.filter(o => mod.match(o.status)));
+  const moduleLateCount = (mod) => orders.filter(o => mod.match(o.status) && isOverdue(o)).length;
+  const unmatchedStages = getUnmatchedStages(stagesRaw);
+  const unmatchedCount = orders.filter(o => unmatchedStages.some(s => s.id === o.status)).length;
+
   return (
     <StagesCtx.Provider value={stagesFlow}>
     <FieldsCtx.Provider value={fieldsRaw}>
 
       <header className="top">
-        <div className="brand">
+        <div className="brand" style={{cursor:"pointer"}} onClick={() => { setView("modules"); setFStage("todos"); setSearch(""); setFPrio("all"); }}>
           <img src="novari-icon.png" alt="Novari Print" className="logo-img" />
           <div>
             <div className="brand-name">Novari Print</div>
@@ -620,8 +671,10 @@ function App() {
         </div>
         <div className="actions">
           <span className={"sync" + (saving ? " busy" : "")}><i></i>{saving ? "Salvando…" : "Sincronizado"}</span>
-          <button className="btn" onClick={() => setShowStages(true)} title="Gerenciar etapas"><Ic n="settings" /><span className="t-btn">Etapas</span></button>
-          <button className="btn" onClick={() => setShowFields(true)} title="Gerenciar campos"><Ic n="layout" /><span className="t-btn">Campos</span></button>
+          {view !== "modules" && <>
+            <button className="btn" onClick={() => setShowStages(true)} title="Gerenciar etapas"><Ic n="settings" /><span className="t-btn">Etapas</span></button>
+            <button className="btn" onClick={() => setShowFields(true)} title="Gerenciar campos"><Ic n="layout" /><span className="t-btn">Campos</span></button>
+          </>}
           <button className="btn" onClick={() => setShowSum(true)} title="Resumo do dia"><Ic n="calendar" /><span className="t-btn">Resumo</span></button>
           <button className="btn" onClick={exportCSV} title="Exportar planilha (CSV)"><Ic n="sheet" /><span className="t-btn">Planilha</span></button>
           <button className="btn" onClick={exportPDF} title="Gerar relatório em PDF"><Ic n="file" /><span className="t-btn">Relatório PDF</span></button>
@@ -632,64 +685,120 @@ function App() {
         </div>
       </header>
 
-      <main className="wrap">
-        <section className="pano" aria-label="Panorama dos pedidos">
-          <div className="pano-head">
-            <div className="stat"><span className="n">{orders.length}</span><span className="t">pedidos</span></div>
+      {view === "modules" ? (
+        /* ---------- Tela de módulos ---------- */
+        <main className="mod-wrap">
+          <div className="mod-head">
+            <h1>Pedidos</h1>
+            <p>Selecione um módulo para gerenciar seus pedidos.</p>
+          </div>
+
+          <div className="mod-summary">
+            <div className="stat"><span className="n">{orders.length}</span><span className="t">pedidos no total</span></div>
             <div className="stat"><span className="n">{formatBRL(sumVal(orders))}</span><span className="t">em carteira</span></div>
             {lateCount > 0
-              ? <div className="late-pill"><Ic n="alert" />{lateCount} {lateCount === 1 ? "pedido atrasado" : "pedidos atrasados"}</div>
-              : <div className="ok-pill"><Ic n="check" />Nenhum pedido atrasado</div>}
+              ? <div className="stat"><span className="n" style={{color:"var(--alert)"}}>{lateCount}</span><span className="t">{lateCount === 1 ? "atrasado" : "atrasados"}</span></div>
+              : <div className="stat"><span className="n" style={{color:"var(--ok)"}}>0</span><span className="t">atrasados</span></div>}
           </div>
-          {orders.length > 0 && (
-            <div className="bar" role="img" aria-label={stagesRaw.map(s => counts[s.id] + " " + s.label.toLowerCase()).join(", ")}>
-              {stagesRaw.filter(s => counts[s.id] > 0).map(s => <i key={s.id} style={{ flex: counts[s.id], background: s.color }}></i>)}
-            </div>
-          )}
-          <div className="legend">
-            <button className="chip" aria-pressed={fStage === "todos"} onClick={() => setFStage("todos")}>Todos <b>{orders.length}</b></button>
-            {stagesRaw.map(s => (
-              <button key={s.id} className="chip" aria-pressed={fStage === s.id} onClick={() => setFStage(fStage === s.id ? "todos" : s.id)}>
-                <span className="sw" style={{ background: s.color }}></span>{s.label} <b>{counts[s.id]}</b>
+
+          <div className="mod-grid">
+            {MODULE_GROUPS.map(m => {
+              const cnt = moduleOrderCount(m);
+              const val = moduleOrderVal(m);
+              const late = moduleLateCount(m);
+              return (
+                <button key={m.key} className="mod-card" onClick={() => { setView(m.key); setFStage("todos"); setSearch(""); setFPrio("all"); }}>
+                  <span className="mod-count">{cnt}</span>
+                  <div className="mod-icon" style={{background:m.bg, color:m.fg}}><Ic n={m.icon} /></div>
+                  <h3>{m.nome}</h3>
+                  <p>{m.desc}</p>
+                  {val > 0 && <div className="mod-val">{formatBRL(val)}</div>}
+                  {late > 0 && <div style={{marginTop:4,fontSize:12,color:"var(--alert)",fontWeight:600}}><Ic n="alert" style={{width:12,height:12,verticalAlign:-2,marginRight:4}} />{late} {late === 1 ? "atrasado" : "atrasados"}</div>}
+                </button>
+              );
+            })}
+            {unmatchedCount > 0 && (
+              <button className="mod-card" onClick={() => { setView("outros"); setFStage("todos"); setSearch(""); setFPrio("all"); }}>
+                <span className="mod-count">{unmatchedCount}</span>
+                <div className="mod-icon" style={{background:"var(--col)", color:"var(--muted)"}}><Ic n="package" /></div>
+                <h3>Outros</h3>
+                <p>Etapas personalizadas</p>
               </button>
-            ))}
+            )}
           </div>
-        </section>
+        </main>
+      ) : (
+        /* ---------- Kanban filtrado por módulo ---------- */
+        <main className="wrap">
+          <button className="back-btn" onClick={() => { setView("modules"); setFStage("todos"); setSearch(""); setFPrio("all"); }}>
+            <Ic n="back" /> Voltar aos módulos
+          </button>
 
-        <div className="tools">
-          <div className="search">
-            <Ic n="search" />
-            <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, número, descrição ou responsável" aria-label="Buscar pedidos" />
+          <section className="pano" aria-label="Panorama dos pedidos">
+            <div className="pano-head">
+              {activeModule && <div style={{display:"flex",alignItems:"center",gap:10,marginRight:20}}>
+                <div className="mod-icon" style={{background:activeModule.bg, color:activeModule.fg, width:36,height:36,borderRadius:8,display:"grid",placeItems:"center"}}><Ic n={activeModule.icon} /></div>
+                <div style={{fontWeight:700,fontSize:17}}>{activeModule.nome}</div>
+              </div>}
+              <div className="stat"><span className="n">{(view === "outros" ? unmatchedStages : viewStages).reduce((n,s) => n + (counts[s.id]||0), 0)}</span><span className="t">pedidos</span></div>
+              <div className="stat"><span className="n">{formatBRL(sumVal(orders.filter(o => (view === "outros" ? unmatchedStages : viewStages).some(s => s.id === o.status))))}</span><span className="t">em carteira</span></div>
+              {(() => {
+                const modLate = orders.filter(o => (view === "outros" ? unmatchedStages : viewStages).some(s => s.id === o.status) && isOverdue(o)).length;
+                return modLate > 0
+                  ? <div className="late-pill"><Ic n="alert" />{modLate} {modLate === 1 ? "atrasado" : "atrasados"}</div>
+                  : <div className="ok-pill"><Ic n="check" />Sem atrasos</div>;
+              })()}
+            </div>
+            {orders.length > 0 && (
+              <div className="bar" role="img" aria-label={(view === "outros" ? unmatchedStages : viewStages).map(s => (counts[s.id]||0) + " " + s.label.toLowerCase()).join(", ")}>
+                {(view === "outros" ? unmatchedStages : viewStages).filter(s => (counts[s.id]||0) > 0).map(s => <i key={s.id} style={{ flex: counts[s.id], background: s.color }}></i>)}
+              </div>
+            )}
+            <div className="legend">
+              <button className="chip" aria-pressed={fStage === "todos"} onClick={() => setFStage("todos")}>Todos <b>{(view === "outros" ? unmatchedStages : viewStages).reduce((n,s) => n + (counts[s.id]||0), 0)}</b></button>
+              {(view === "outros" ? unmatchedStages : viewStages).map(s => (
+                <button key={s.id} className="chip" aria-pressed={fStage === s.id} onClick={() => setFStage(fStage === s.id ? "todos" : s.id)}>
+                  <span className="sw" style={{ background: s.color }}></span>{s.label} <b>{counts[s.id]||0}</b>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="tools">
+            <div className="search">
+              <Ic n="search" />
+              <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, número, descrição ou responsável" aria-label="Buscar pedidos" />
+            </div>
+            <select className="sel" value={fPrio} onChange={e => setFPrio(e.target.value)} aria-label="Filtrar por prioridade">
+              <option value="all">Todas as prioridades</option>
+              {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+            {(search || fPrio !== "all") && <button className="btn" onClick={() => { setSearch(""); setFPrio("all"); }}>Limpar filtros</button>}
+            <span className="count">Mostrando {shown} de {orders.length} pedidos</span>
           </div>
-          <select className="sel" value={fPrio} onChange={e => setFPrio(e.target.value)} aria-label="Filtrar por prioridade">
-            <option value="all">Todas as prioridades</option>
-            {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-          {(search || fPrio !== "all") && <button className="btn" onClick={() => { setSearch(""); setFPrio("all"); }}>Limpar filtros</button>}
-          <span className="count">Mostrando {shown} de {orders.length} pedidos</span>
-        </div>
 
-        <div className="board">
-          {stagesFlow.filter(s => fStage === "todos" || fStage === s.id).map(s => {
-            const list = stageList(s.id);
-            const v = sumVal(list);
-            return (
-              <section className="col" key={s.id}>
-                <div className="col-h">
-                  <Ic n={s.icon} /><h2>{s.label}</h2><span className="badge">{list.length}</span>
-                  {v > 0 && <span className="sum">{formatBRL(v)}</span>}
-                </div>
-                {list.length === 0 && <p className="empty">Nenhum pedido nesta etapa.</p>}
-                {list.map(o => (
-                  <OrderCard key={o.id} o={o} stage={s}
-                    onOpen={() => openDetail(o)} onEdit={() => openEdit(o)} onDel={() => setConfirmDel(o.id)}
-                    onNext={() => s.next && moveTo(o, s.next)} onPrev={() => s.prev && moveTo(o, s.prev)} />
-                ))}
-              </section>
-            );
-          })}
-        </div>
-      </main>
+          <div className="board">
+            {(view === "outros" ? stagesFlow.filter(s => unmatchedStages.some(u => u.id === s.id)) : viewStagesFlow).filter(s => fStage === "todos" || fStage === s.id).map(s => {
+              const list = stageList(s.id);
+              const v = sumVal(list);
+              return (
+                <section className="col" key={s.id}>
+                  <div className="col-h">
+                    <Ic n={s.icon} /><h2>{s.label}</h2><span className="badge">{list.length}</span>
+                    {v > 0 && <span className="sum">{formatBRL(v)}</span>}
+                  </div>
+                  {list.length === 0 && <p className="empty">Nenhum pedido nesta etapa.</p>}
+                  {list.map(o => (
+                    <OrderCard key={o.id} o={o} stage={s}
+                      onOpen={() => openDetail(o)} onEdit={() => openEdit(o)} onDel={() => setConfirmDel(o.id)}
+                      onNext={() => s.next && moveTo(o, s.next)} onPrev={() => s.prev && moveTo(o, s.prev)} />
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+        </main>
+      )}
 
       {showSum && <Overlay onClose={() => setShowSum(false)}><DailySummary orders={orders} onClose={() => setShowSum(false)} /></Overlay>}
       {showStages && <Overlay onClose={() => setShowStages(false)}><StagesManager stages={stagesRaw} counts={counts} onClose={() => setShowStages(false)} onSave={saveStages} /></Overlay>}

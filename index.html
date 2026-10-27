@@ -359,7 +359,8 @@ function download(blob, name) {
 /* ---------- Módulos (agrupamento visual) ---------- */
 const MODULE_GROUPS = [
   { key:"comercial",   nome:"Comercial",   desc:"Propostas comerciais e orçamentos",    icon:"quote",    bg:"#FFFBEB", fg:"#92400E", match: id => id === "proposta" },
-  { key:"producao",    nome:"Produção",    desc:"Pedidos pendentes e em confecção",      icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: id => id === "pendente" || id === "confeccao" },
+  { key:"pendente",    nome:"Pendente",    desc:"Aguardando entrada em produção",       icon:"clock",    bg:"#FDECEC", fg:"#CE1B21", match: id => id === "pendente" },
+  { key:"producao",    nome:"Produção",    desc:"Pedidos em confecção",                  icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: id => id === "confeccao" },
   { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: id => id === "entrega" || id === "entregue" },
   { key:"faturamento", nome:"Faturamento", desc:"Faturamento e pedidos faturados",       icon:"receipt",  bg:"#F5F3FF", fg:"#5B21B6", match: id => /fatur/i.test(id) },
 ];

@@ -33,10 +33,6 @@ function AuthGate({children}) {
       .finally(() => setEnviando(false));
   }
 
-  function sair() {
-    firebase.auth().signOut();
-  }
-
   if (authState.loading) {
     return (
       <div style={{position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'#F3F4F6', zIndex:9999}}>
@@ -78,14 +74,5 @@ function AuthGate({children}) {
     );
   }
 
-  return (
-    <>
-      <button onClick={sair} title="Sair" aria-label="Sair do sistema"
-        style={{position:'fixed', top:14, right:16, zIndex:500, display:'flex', alignItems:'center', gap:6, height:32, padding:'0 12px', borderRadius:8, border:'1px solid #E5E7EB', background:'#FFFFFF', color:'#4B5673', fontSize:12.5, fontWeight:600, cursor:'pointer', boxShadow:'0 1px 3px rgba(16,24,40,.08)'}}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Sair
-      </button>
-      {children}
-    </>
-  );
+  return children;
 }

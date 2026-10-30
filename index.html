@@ -372,7 +372,6 @@ function download(blob, name) {
 
 /* ---------- Módulos (agrupamento visual) ---------- */
 const MODULE_GROUPS = [
-  { key:"comercial",   nome:"Comercial",   desc:"Propostas comerciais e orçamentos",    icon:"quote",    bg:"#FFFBEB", fg:"#92400E", match: (id, stages) => groupOfStage(id, stages) === "comercial" },
   { key:"pendente",    nome:"Pendente",    desc:"Aguardando entrada em produção",       icon:"clock",    bg:"#FDECEC", fg:"#CE1B21", match: (id, stages) => groupOfStage(id, stages) === "pendente" },
   { key:"producao",    nome:"Produção",    desc:"Pedidos em confecção",                  icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: (id, stages) => groupOfStage(id, stages) === "producao" },
   { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: (id, stages) => groupOfStage(id, stages) === "logistica" },
@@ -493,7 +492,11 @@ function App() {
   }
 
   function openAdd() {
-    setForm({ numero: "", cliente: "", descricao: "", quantidade: "", valorUnit: "", valor: "", custo: "", frete: "", despesas: "", prazo: "", status: (stagesRaw[0] || {}).id || "proposta", prioridade: "media", responsavel: "", observacoes: "", extras: {} });
+    // Pula etapas do grupo "comercial" (propostas/orçamentos agora são feitos em Vendas),
+    // pra um pedido novo nunca nascer sem card visível no painel.
+    const usable = stagesRaw.find(s => groupOfStage(s.id, stagesRaw) !== "comercial");
+    const defaultStatus = (usable || stagesRaw[0] || {}).id || "pendente";
+    setForm({ numero: "", cliente: "", descricao: "", quantidade: "", valorUnit: "", valor: "", custo: "", frete: "", despesas: "", prazo: "", status: defaultStatus, prioridade: "media", responsavel: "", observacoes: "", extras: {} });
     setModal("add");
   }
   function openEdit(o) { setForm({ ...o }); setModal("edit"); }

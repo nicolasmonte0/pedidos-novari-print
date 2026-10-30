@@ -229,12 +229,23 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIwAAACOCAY
 
 /* ---------- Configuração ---------- */
 const DEFAULT_STAGES = [
-  { id:"proposta",  label:"Proposta Comercial", icon:"quote",   color:"#C9B27C", actLabel:"Aprovar e iniciar produção" },
-  { id:"pendente",  label:"Pendente",           icon:"clock",   color:"#94A0B6", actLabel:"Iniciar confecção" },
-  { id:"confeccao", label:"Em confecção",       icon:"printer", color:"#6B7AA1", actLabel:"Enviar para entrega" },
-  { id:"entrega",   label:"Em entrega",         icon:"truck",   color:"#48577E", actLabel:"Marcar como entregue" },
-  { id:"entregue",  label:"Entregue",           icon:"check",   color:"#14213D", actLabel:"" },
+  { id:"proposta",  label:"Proposta Comercial", icon:"quote",   color:"#C9B27C", actLabel:"Aprovar e iniciar produção", group:"comercial" },
+  { id:"pendente",  label:"Pendente",           icon:"clock",   color:"#94A0B6", actLabel:"Iniciar confecção",          group:"pendente" },
+  { id:"confeccao", label:"Em confecção",       icon:"printer", color:"#6B7AA1", actLabel:"Enviar para entrega",        group:"producao" },
+  { id:"entrega",   label:"Em entrega",         icon:"truck",   color:"#48577E", actLabel:"Marcar como entregue",       group:"logistica" },
+  { id:"entregue",  label:"Entregue",           icon:"check",   color:"#14213D", actLabel:"",                           group:"logistica" },
 ];
+/* Grupo (card) de uma etapa: usa o campo "group" salvo na etapa; se a etapa
+   ainda não tiver esse campo (dado antigo), cai para o padrão de fábrica
+   pelo id, ou por "fatur" no id/nome, senão fica em "Outros". */
+function groupOfStage(id, allStages) {
+  const s = (allStages || []).find(x => x.id === id);
+  if (s && s.group) return s.group;
+  const d = DEFAULT_STAGES.find(x => x.id === id);
+  if (d) return d.group;
+  if (/fatur/i.test(id) || (s && /fatur/i.test(s.label || ""))) return "faturamento";
+  return "";
+}
 const STAGE_PALETTE = ["#C9B27C", "#94A0B6", "#6B7AA1", "#48577E", "#14213D", "#B4534A", "#4F8A6A", "#7A5AA3"];
 const STAGE_ICONS = ["quote", "clock", "printer", "truck", "check", "file", "package", "alert", "user", "calendar"];
 const StagesCtx = React.createContext([]);
@@ -361,19 +372,19 @@ function download(blob, name) {
 
 /* ---------- Módulos (agrupamento visual) ---------- */
 const MODULE_GROUPS = [
-  { key:"comercial",   nome:"Comercial",   desc:"Propostas comerciais e orçamentos",    icon:"quote",    bg:"#FFFBEB", fg:"#92400E", match: id => id === "proposta" },
-  { key:"pendente",    nome:"Pendente",    desc:"Aguardando entrada em produção",       icon:"clock",    bg:"#FDECEC", fg:"#CE1B21", match: id => id === "pendente" },
-  { key:"producao",    nome:"Produção",    desc:"Pedidos em confecção",                  icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: id => id === "confeccao" },
-  { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: id => id === "entrega" || id === "entregue" },
-  { key:"faturamento", nome:"Faturamento", desc:"Faturamento e pedidos faturados",       icon:"receipt",  bg:"#F5F3FF", fg:"#5B21B6", match: id => /fatur/i.test(id) },
+  { key:"comercial",   nome:"Comercial",   desc:"Propostas comerciais e orçamentos",    icon:"quote",    bg:"#FFFBEB", fg:"#92400E", match: (id, stages) => groupOfStage(id, stages) === "comercial" },
+  { key:"pendente",    nome:"Pendente",    desc:"Aguardando entrada em produção",       icon:"clock",    bg:"#FDECEC", fg:"#CE1B21", match: (id, stages) => groupOfStage(id, stages) === "pendente" },
+  { key:"producao",    nome:"Produção",    desc:"Pedidos em confecção",                  icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: (id, stages) => groupOfStage(id, stages) === "producao" },
+  { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: (id, stages) => groupOfStage(id, stages) === "logistica" },
+  { key:"faturamento", nome:"Faturamento", desc:"Faturamento e pedidos faturados",       icon:"receipt",  bg:"#F5F3FF", fg:"#5B21B6", match: (id, stages) => groupOfStage(id, stages) === "faturamento" },
 ];
 function getModuleStages(moduleKey, allStages) {
   const mod = MODULE_GROUPS.find(m => m.key === moduleKey);
   if (!mod) return allStages;
-  return allStages.filter(s => mod.match(s.id));
+  return allStages.filter(s => mod.match(s.id, allStages));
 }
 function getUnmatchedStages(allStages) {
-  return allStages.filter(s => !MODULE_GROUPS.some(m => m.match(s.id)));
+  return allStages.filter(s => !MODULE_GROUPS.some(m => m.match(s.id, allStages)));
 }
 
 /* ---------- Aplicativo ---------- */
@@ -654,10 +665,10 @@ function App() {
   /* ----- Módulos: dados por grupo ----- */
   const activeModule = view !== "modules" ? MODULE_GROUPS.find(m => m.key === view) : null;
   const viewStages = activeModule ? getModuleStages(view, stagesRaw) : stagesRaw;
-  const viewStagesFlow = activeModule ? stagesFlow.filter(s => activeModule.match(s.id)) : stagesFlow;
-  const moduleOrderCount = (mod) => orders.filter(o => mod.match(o.status)).length;
-  const moduleOrderVal = (mod) => sumVal(orders.filter(o => mod.match(o.status)));
-  const moduleLateCount = (mod) => orders.filter(o => mod.match(o.status) && isOverdue(o)).length;
+  const viewStagesFlow = activeModule ? stagesFlow.filter(s => activeModule.match(s.id, stagesRaw)) : stagesFlow;
+  const moduleOrderCount = (mod) => orders.filter(o => mod.match(o.status, stagesRaw)).length;
+  const moduleOrderVal = (mod) => sumVal(orders.filter(o => mod.match(o.status, stagesRaw)));
+  const moduleLateCount = (mod) => orders.filter(o => mod.match(o.status, stagesRaw) && isOverdue(o)).length;
   const unmatchedStages = getUnmatchedStages(stagesRaw);
   const unmatchedCount = orders.filter(o => unmatchedStages.some(s => s.id === o.status)).length;
 
@@ -1027,8 +1038,10 @@ function DailySummary({ orders, onClose }) {
 /* ---------- Formulário ---------- */
 function Field({ label, children }) { return <div className="f"><label>{label}</label>{children}</div>; }
 /* ---------- Gerenciar etapas ---------- */
+const GROUP_OPTIONS = [...MODULE_GROUPS.map(m => ({ key: m.key, label: m.nome })), { key: "", label: "Nenhum (aparece em Outros)" }];
+
 function StagesManager({ stages, counts, onClose, onSave }) {
-  const [list, setList] = useState(() => stages.map(s => ({ ...s })));
+  const [list, setList] = useState(() => stages.map(s => ({ ...s, group: s.group != null ? s.group : groupOfStage(s.id, stages) })));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -1044,7 +1057,8 @@ function StagesManager({ stages, counts, onClose, onSave }) {
   }
   function addStage() {
     const id = "etapa-" + Date.now().toString(36);
-    setList(l => [...l, { id, label: "Nova etapa", icon: "quote", color: STAGE_PALETTE[l.length % STAGE_PALETTE.length], actLabel: "" }]);
+    const lastGroup = list.length ? list[list.length - 1].group : "";
+    setList(l => [...l, { id, label: "Nova etapa", icon: "quote", color: STAGE_PALETTE[l.length % STAGE_PALETTE.length], actLabel: "", group: lastGroup || "" }]);
   }
   function removeStage(i) {
     setList(l => l.filter((_, idx) => idx !== i));
@@ -1099,6 +1113,12 @@ function StagesManager({ stages, counts, onClose, onSave }) {
                     <button key={c} onClick={() => update(i, { color: c })} aria-label={c}
                       style={{ width: 20, height: 20, borderRadius: "50%", background: c, border: s.color === c ? "2px solid var(--ink)" : "1px solid var(--line)", cursor: "pointer" }}></button>
                   ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Aparece no card</span>
+                  <select className="inp" value={s.group || ""} onChange={e => update(i, { group: e.target.value })} style={{ width: "auto", padding: "4px 8px", fontSize: 12.5 }}>
+                    {GROUP_OPTIONS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+                  </select>
                 </div>
                 <input className="inp" value={s.actLabel || ""} onChange={e => update(i, { actLabel: e.target.value })}
                   placeholder={i < list.length - 1 ? 'Texto do botão (opcional) · padrão: "Avançar para ' + (list[i + 1] ? list[i + 1].label : "…") + '"' : "Última etapa — sem botão de avançar"}

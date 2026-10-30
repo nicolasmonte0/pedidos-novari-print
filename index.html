@@ -374,7 +374,7 @@ function download(blob, name) {
 const MODULE_GROUPS = [
   { key:"pendente",    nome:"Pendente",    desc:"Aguardando entrada em produção",       icon:"clock",    bg:"#FDECEC", fg:"#CE1B21", match: (id, stages) => groupOfStage(id, stages) === "pendente" },
   { key:"producao",    nome:"Produção",    desc:"Pedidos em confecção",                  icon:"settings", bg:"#EAF5FC", fg:"#1D6FA5", match: (id, stages) => groupOfStage(id, stages) === "producao" },
-  { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#ECFDF3", fg:"#067647", match: (id, stages) => groupOfStage(id, stages) === "logistica" },
+  { key:"logistica",   nome:"Logística",   desc:"Em entrega e entregues",               icon:"truck",    bg:"#D7F7E6", fg:"#067647", match: (id, stages) => groupOfStage(id, stages) === "logistica" },
   { key:"faturamento", nome:"Faturamento", desc:"Faturamento e pedidos faturados",       icon:"receipt",  bg:"#F5F3FF", fg:"#5B21B6", match: (id, stages) => groupOfStage(id, stages) === "faturamento" },
 ];
 function getModuleStages(moduleKey, allStages) {

@@ -199,6 +199,12 @@ textarea.inp{resize:vertical;min-height:60px}
 .back-btn{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;border:0;background:none;color:var(--accent);font-weight:500;font-size:13.5px;cursor:pointer;padding:4px 0}
 .back-btn:hover{text-decoration:underline}
 .back-btn .ic{width:16px;height:16px}
+.nf-wrap{position:relative}
+.nf-backdrop{position:fixed;inset:0;z-index:4}
+.nf-menu{position:absolute;bottom:calc(100% + 6px);left:0;min-width:230px;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.18);overflow:hidden;z-index:5}
+.nf-menu button{display:block;width:100%;text-align:left;padding:10px 12px;border:0;background:none;color:var(--ink);font-size:13px;cursor:pointer}
+.nf-menu button:hover{background:var(--hover)}
+.nf-menu button+button{border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -533,9 +539,12 @@ function App() {
     await fbDel(id);
     flash("Pedido excluído.");
   }
-  async function moveTo(o, to) {
-    await fbSet(pushHistory({ ...o, status: to }, "Etapa alterada", stageLabel(o.status, stagesRaw) + " → " + stageLabel(to, stagesRaw)));
-    flash("Pedido movido para " + stageLabel(to, stagesRaw).toLowerCase() + ".");
+  async function moveTo(o, to, tag) {
+    const next = { ...o, status: to };
+    if (tag) next.nfStatus = tag;
+    const detalhe = stageLabel(o.status, stagesRaw) + " → " + stageLabel(to, stagesRaw) + (tag ? " · " + tag : "");
+    await fbSet(pushHistory(next, "Etapa alterada", detalhe));
+    flash("Pedido movido para " + stageLabel(to, stagesRaw).toLowerCase() + (tag ? " (" + tag + ")" : "") + ".");
   }
 
   function exportCSV() {
@@ -810,7 +819,7 @@ function App() {
                   {list.map(o => (
                     <OrderCard key={o.id} o={o} stage={s}
                       onOpen={() => openDetail(o)} onEdit={() => openEdit(o)} onDel={() => setConfirmDel(o.id)}
-                      onNext={() => s.next && moveTo(o, s.next)} onPrev={() => s.prev && moveTo(o, s.prev)} />
+                      onNext={(tag) => s.next && moveTo(o, s.next, tag)} onPrev={() => s.prev && moveTo(o, s.prev)} />
                   ))}
                 </section>
               );
@@ -867,6 +876,8 @@ function App() {
 /* ---------- Cartão do pedido ---------- */
 function OrderCard({ o, stage, onOpen, onEdit, onDel, onNext, onPrev }) {
   const fields = useFields();
+  const [nfOpen, setNfOpen] = React.useState(false);
+  const isFaturamento = stage.group === "faturamento";
   const late = isOverdue(o);
   const due = dueInfo(o);
   const stop = e => e.stopPropagation();
@@ -895,11 +906,27 @@ function OrderCard({ o, stage, onOpen, onEdit, onDel, onNext, onPrev }) {
         </div>
       )}
       {o.responsavel && <div className="meta"><span><Ic n="user" />{o.responsavel}</span></div>}
+      {o.nfStatus && <div className="meta"><span>{o.nfStatus}</span></div>}
       {customFields.map(f => <div className="meta" key={f.key}><span>{f.label}: {o.extras[f.key]}</span></div>)}
       {due && <div className={"due " + due.k}><Ic n={due.k === "late" ? "alert" : "calendar"} /><span>{due.t}</span>{due.r && <em>{due.r}</em>}</div>}
       {o.observacoes && <p className="obs">{tidy(o.observacoes)}</p>}
       <div className="c-act" onClick={stop}>
-        {stage.actText ? <button className="btn sm" onClick={onNext}>{stage.actText}</button> : <span></span>}
+        {stage.actText ? (
+          isFaturamento ? (
+            <div className="nf-wrap">
+              <button className="btn sm" onClick={() => setNfOpen(v => !v)}>{stage.actText}</button>
+              {nfOpen && (
+                <>
+                  <div className="nf-backdrop" onClick={() => setNfOpen(false)}></div>
+                  <div className="nf-menu">
+                    <button onClick={() => { setNfOpen(false); onNext("Encaminhado para Entrega Sem NF"); }}>Encaminhado para Entrega Sem NF</button>
+                    <button onClick={() => { setNfOpen(false); onNext("NF Emitida"); }}>NF Emitida</button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : <button className="btn sm" onClick={() => onNext()}>{stage.actText}</button>
+        ) : <span></span>}
         <span className="ib">
           {stage.prev && <button onClick={onPrev} aria-label="Voltar etapa" title="Voltar etapa"><Ic n="back" /></button>}
           <button onClick={onEdit} aria-label="Editar pedido" title="Editar"><Ic n="pencil" /></button>

@@ -198,6 +198,7 @@ textarea.inp{resize:vertical;min-height:60px}
 .mod-summary .stat .t{display:block;margin-top:2px;color:var(--muted);font-size:12.5px}
 .back-btn{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;border:0;background:none;color:var(--accent);font-weight:500;font-size:13.5px;cursor:pointer;padding:4px 0}
 .back-btn:hover{text-decoration:underline}
+.rec-banner{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;background:var(--alert-bg);border:1px solid var(--alert);border-radius:10px;color:var(--ink);font-size:13.5px}
 .back-btn .ic{width:16px;height:16px}
 </style>
 </head>
@@ -403,6 +404,8 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [stagesRaw, setStagesRaw] = useState(DEFAULT_STAGES);
   const [showStages, setShowStages] = useState(false);
+  const [stagesLoaded, setStagesLoaded] = useState(false);
+  const [showRecover, setShowRecover] = useState(false);
   const [fieldsRaw, setFieldsRaw] = useState(DEFAULT_FIELDS);
   const [showFields, setShowFields] = useState(false);
   const [view, setView] = useState("modules"); // "modules" or module key
@@ -430,6 +433,7 @@ function App() {
       doc => {
         if (doc.exists && Array.isArray(doc.data().list) && doc.data().list.length) {
           setStagesRaw(doc.data().list);
+          setStagesLoaded(true);
         } else {
           setStagesRaw(DEFAULT_STAGES);
           db.collection("config").doc("stages").set({ list: DEFAULT_STAGES, updatedAt: new Date().toISOString() }).catch(() => {});
@@ -673,6 +677,7 @@ function App() {
   const moduleOrderVal = (mod) => sumVal(orders.filter(o => mod.match(o.status, stagesRaw)));
   const moduleLateCount = (mod) => orders.filter(o => mod.match(o.status, stagesRaw) && isOverdue(o)).length;
   const unmatchedStages = getUnmatchedStages(stagesRaw);
+  const orphanOrders = stagesLoaded ? orders.filter(o => o.status && !stagesRaw.some(s => s.id === o.status)) : [];
   const unmatchedCount = orders.filter(o => unmatchedStages.some(s => s.id === o.status)).length;
 
   return (
@@ -712,6 +717,12 @@ function App() {
             <p>Selecione um módulo para gerenciar seus pedidos.</p>
           </div>
 
+          {orphanOrders.length > 0 && (
+            <div className="rec-banner">
+              <div><b>{orphanOrders.length} pedido{orphanOrders.length > 1 ? "s" : ""} em etapa que não existe mais na configuração.</b> Os pedidos estão salvos e intactos — só falta recriar a etapa deles.</div>
+              <button className="btn primary" onClick={() => setShowRecover(true)}>Recuperar etapas</button>
+            </div>
+          )}
           <div className="mod-summary">
             <div className="stat"><span className="n">{orders.length}</span><span className="t">pedidos no total</span></div>
             <div className="stat"><span className="n">{formatBRL(sumVal(orders))}</span><span className="t">em carteira</span></div>
@@ -820,6 +831,7 @@ function App() {
       )}
 
       {showSum && <Overlay onClose={() => setShowSum(false)}><DailySummary orders={orders} onClose={() => setShowSum(false)} /></Overlay>}
+      {showRecover && <Overlay onClose={() => setShowRecover(false)}><RecoverStages orders={orphanOrders} stages={stagesRaw} onClose={() => setShowRecover(false)} onSave={saveStages} /></Overlay>}
       {showStages && <Overlay onClose={() => setShowStages(false)}><StagesManager stages={stagesRaw} counts={counts} onClose={() => setShowStages(false)} onSave={saveStages} /></Overlay>}
       {showFields && <Overlay onClose={() => setShowFields(false)}><FieldsManager fields={fieldsRaw} onClose={() => setShowFields(false)} onSave={saveFields} /></Overlay>}
 
@@ -1042,6 +1054,77 @@ function DailySummary({ orders, onClose }) {
 function Field({ label, children }) { return <div className="f"><label>{label}</label>{children}</div>; }
 /* ---------- Gerenciar etapas ---------- */
 const GROUP_OPTIONS = [...MODULE_GROUPS.map(m => ({ key: m.key, label: m.nome })), { key: "", label: "Nenhum (aparece em Outros)" }];
+
+/* ---------- Recuperar etapas perdidas (acionado pelo usuário, só adiciona) ---------- */
+function labelFromHistory(o) {
+  const h = (o.historico || []).slice().reverse();
+  for (const e of h) {
+    for (const seg of String(e.detalhes || "").split(" · ")) {
+      if (seg.includes("→") && (e.acao === "Etapa alterada" || /^Etapa:/.test(seg))) {
+        return seg.replace(/^Etapa:\s*/, "").split("→").pop().trim();
+      }
+    }
+  }
+  return "";
+}
+function guessGroup(label) {
+  if (/fatur/i.test(label)) return "faturamento";
+  if (/entreg|log[ií]st/i.test(label)) return "logistica";
+  if (/confec|produ/i.test(label)) return "producao";
+  if (/pendent/i.test(label)) return "pendente";
+  return "";
+}
+function RecoverStages({ orders, stages, onClose, onSave }) {
+  const [rows, setRows] = useState(() => {
+    const map = {};
+    orders.forEach(o => { (map[o.status] = map[o.status] || []).push(o); });
+    return Object.keys(map).map(id => {
+      const label = map[id].map(labelFromHistory).find(Boolean) || "";
+      return { id, label, group: guessGroup(label), orders: map[id] };
+    });
+  });
+  const [saving, setSaving] = useState(false);
+  const upd = (i, patch) => setRows(r => r.map((x, j) => j === i ? { ...x, ...patch } : x));
+  async function save() {
+    setSaving(true);
+    try {
+      const add = rows.map((r, i) => ({
+        id: r.id, label: (r.label || "").trim() || "Etapa recuperada " + (i + 1),
+        icon: r.group === "faturamento" ? "receipt" : r.group === "logistica" ? "truck" : "quote",
+        color: STAGE_PALETTE[(stages.length + i) % STAGE_PALETTE.length], actLabel: "", group: r.group,
+      }));
+      await onSave([...stages, ...add]);
+      onClose();
+    } finally { setSaving(false); }
+  }
+  return (
+    <div className="dlg" role="dialog" aria-modal="true" aria-label="Recuperar etapas">
+      <div className="dlg-h">
+        <div><h2>Recuperar etapas</h2>
+          <div className="sub">Estes pedidos apontam para etapas que não estão mais na lista. Nada será apagado: as etapas abaixo serão apenas adicionadas ao fim da lista (depois você pode reordenar em Etapas).</div></div>
+        <button className="x" onClick={onClose} aria-label="Fechar"><Ic n="x" /></button>
+      </div>
+      <div className="dlg-b">
+        {rows.map((r, i) => (
+          <div key={r.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{r.orders.length} pedido{r.orders.length > 1 ? "s" : ""}: {r.orders.slice(0, 3).map(o => o.cliente).join(", ")}{r.orders.length > 3 ? "…" : ""}</div>
+            <input className="inp" value={r.label} onChange={e => upd(i, { label: e.target.value })} placeholder="Nome da etapa (ex: Faturamento)" />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>Aparece no card</span>
+              <select className="inp" value={r.group} onChange={e => upd(i, { group: e.target.value })} style={{ width: "auto", padding: "4px 8px", fontSize: 12.5 }}>
+                {GROUP_OPTIONS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="dlg-f">
+        <button className="btn" onClick={onClose}>Cancelar</button>
+        <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Salvando…" : "Recriar etapas"}</button>
+      </div>
+    </div>
+  );
+}
 
 function StagesManager({ stages, counts, onClose, onSave }) {
   const [list, setList] = useState(() => stages.map(s => ({ ...s, group: s.group != null ? s.group : groupOfStage(s.id, stages) })));

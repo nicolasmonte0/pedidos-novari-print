@@ -6,6 +6,7 @@ function AuthGate({children}) {
   const [senha, setSenha] = React.useState('');
   const [erro, setErro] = React.useState('');
   const [enviando, setEnviando] = React.useState(false);
+  const [aviso, setAviso] = React.useState('');
 
   React.useEffect(() => {
     if (!window.firebase || !firebase.auth) { setAuthState({loading:false, user:null}); return; }
@@ -13,9 +14,23 @@ function AuthGate({children}) {
     return unsub;
   }, []);
 
+  function esqueciSenha() {
+    setErro(''); setAviso('');
+    if (!email.trim()) { setErro('Digite seu e-mail acima e clique em "Esqueci minha senha".'); return; }
+    setEnviando(true);
+    firebase.auth().sendPasswordResetEmail(email.trim())
+      .then(() => setAviso('Se este e-mail estiver cadastrado, enviamos um link para redefinir a senha. Confira também a caixa de spam.'))
+      .catch(err => {
+        if (err.code === 'auth/invalid-email') setErro('E-mail inválido.');
+        else if (err.code === 'auth/too-many-requests') setErro('Muitas tentativas. Aguarde um pouco e tente de novo.');
+        else setAviso('Se este e-mail estiver cadastrado, enviamos um link para redefinir a senha. Confira também a caixa de spam.');
+      })
+      .finally(() => setEnviando(false));
+  }
+
   function entrar(e) {
     e.preventDefault();
-    setErro('');
+    setErro(''); setAviso('');
     if (!email.trim() || !senha) { setErro('Informe e-mail e senha.'); return; }
     setEnviando(true);
     firebase.auth().signInWithEmailAndPassword(email.trim(), senha)
@@ -62,7 +77,12 @@ function AuthGate({children}) {
             <label style={{display:'block', fontSize:13, fontWeight:600, color:'#374151', marginBottom:6}} htmlFor="ag-senha">Senha</label>
             <input id="ag-senha" type="password" autoComplete="current-password" value={senha} onChange={e => setSenha(e.target.value)}
               style={{boxSizing:'border-box', width:'100%', padding:'11px 14px', border:'1px solid #E5E7EB', borderRadius:10, fontSize:14, color:'#151F38'}} placeholder="••••••••" />
+            <div style={{textAlign:'right', marginTop:8}}>
+              <button type="button" onClick={esqueciSenha} disabled={enviando}
+                style={{border:'none', background:'none', padding:0, fontSize:12.5, fontWeight:600, color:'#1D6FA5', cursor:'pointer', textDecoration:'underline', textUnderlineOffset:2}}>Esqueci minha senha</button>
+            </div>
           </div>
+          {aviso && <p style={{margin:0, fontSize:13, color:'#067647', fontWeight:600}}>{aviso}</p>}
           {erro && <p style={{margin:0, fontSize:13, color:'#B42318', fontWeight:600}}>{erro}</p>}
           <button type="submit" disabled={enviando}
             style={{boxSizing:'border-box', width:'100%', padding:'12px 14px', border:'none', borderRadius:10, background:'#151F38', color:'#FFFFFF', fontSize:14.5, fontWeight:700, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1}}>

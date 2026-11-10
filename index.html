@@ -436,10 +436,10 @@ function App() {
           setStagesLoaded(true);
         } else {
           setStagesRaw(DEFAULT_STAGES);
-          db.collection("config").doc("stages").set({ list: DEFAULT_STAGES, updatedAt: new Date().toISOString() }).catch(() => {});
+          // Sem gravação automática: os padrões ficam só em memória até o usuário salvar em "Etapas".
         }
       },
-      () => setStagesRaw(DEFAULT_STAGES)
+      err => { setStagesRaw(DEFAULT_STAGES); setConnErr("Não foi possível ler as etapas: " + err.message); }
     );
     return unsub;
   }, []);
@@ -457,7 +457,7 @@ function App() {
           setFieldsRaw(doc.data().list);
         } else {
           setFieldsRaw(DEFAULT_FIELDS);
-          db.collection("config").doc("fields").set({ list: DEFAULT_FIELDS, updatedAt: new Date().toISOString() }).catch(() => {});
+          // Sem gravação automática: os padrões ficam só em memória até o usuário salvar em "Campos".
         }
       },
       () => setFieldsRaw(DEFAULT_FIELDS)

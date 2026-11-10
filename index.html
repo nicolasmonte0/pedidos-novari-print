@@ -421,7 +421,7 @@ function App() {
   useEffect(() => {
     if (!IS_CFG) { setLoading(false); setConnErr("Não foi possível iniciar o Firebase."); return; }
     const unsub = db.collection(COL).orderBy("criadoEm", "asc").onSnapshot(
-      snap => { setOrders(snap.docs.map(d => d.data())); setLoading(false); setConnErr(null); },
+      snap => { setOrders(snap.docs.map(d => d.data()).filter(o => !o.excluido)); setLoading(false); setConnErr(null); },
       err => { setConnErr(err.message); setLoading(false); }
     );
     return unsub;
@@ -491,7 +491,8 @@ function App() {
     finally { setSaving(false); }
   }
   async function fbDel(id) {
-    try { await db.collection(COL).doc(id).delete(); }
+    // Exclusão reversível: o pedido vai para a Lixeira do CRM (lixeira.html) em vez de ser apagado.
+    try { await db.collection(COL).doc(id).update({ excluido: true, excluidoEm: firebase.firestore.FieldValue.serverTimestamp(), excluidoPor: ((firebase.auth().currentUser || {}).email) || "" }); }
     catch (e) { flash("Erro ao excluir: " + e.message, "err"); }
   }
 
@@ -535,7 +536,7 @@ function App() {
   async function handleDelete(id) {
     setModal(null); setConfirmDel(null);
     await fbDel(id);
-    flash("Pedido excluído.");
+    flash("Pedido movido para a lixeira.");
   }
   async function moveTo(o, to) {
     await fbSet(pushHistory({ ...o, status: to }, "Etapa alterada", stageLabel(o.status, stagesRaw) + " → " + stageLabel(to, stagesRaw)));
@@ -860,11 +861,11 @@ function App() {
       {confirmDel && (
         <Overlay onClose={() => setConfirmDel(null)}>
           <div className="dlg sm" role="alertdialog" aria-modal="true" aria-label="Excluir pedido">
-            <div className="dlg-h"><h2>Excluir este pedido?</h2></div>
-            <div className="dlg-b"><p style={{ margin: 0, color: "var(--ink-2)" }}>O pedido será removido do sistema e não poderá ser recuperado. Se tiver dúvida, gere um backup antes.</p></div>
+            <div className="dlg-h"><h2>Mover para a lixeira?</h2></div>
+            <div className="dlg-b"><p style={{ margin: 0, color: "var(--ink-2)" }}>O pedido sai da lista, mas fica guardado na Lixeira do sistema (menu lateral) e pode ser restaurado quando quiser.</p></div>
             <div className="dlg-f">
               <button className="btn" onClick={() => setConfirmDel(null)}>Cancelar</button>
-              <button className="btn primary" style={{ background: "var(--alert-solid)", borderColor: "var(--alert-solid)", color: "#fff" }} onClick={() => handleDelete(confirmDel)}>Excluir pedido</button>
+              <button className="btn primary" style={{ background: "var(--alert-solid)", borderColor: "var(--alert-solid)", color: "#fff" }} onClick={() => handleDelete(confirmDel)}>Mover para a lixeira</button>
             </div>
           </div>
         </Overlay>

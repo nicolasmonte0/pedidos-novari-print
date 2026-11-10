@@ -76,3 +76,43 @@ function AuthGate({children}) {
 
   return children;
 }
+
+/* ---------- Registro de autoria (quem criou / alterou) ---------- */
+/* Acrescenta automaticamente aos dados gravados: criadoPor (novos), alteradoPor e alteradoEm.
+   Só acrescenta campos novos; não lê nem apaga nada. Se não houver usuário logado, não muda a gravação. */
+(function () {
+  try {
+    if (!window.firebase || !firebase.firestore || window.__novariAuditoria) return;
+    window.__novariAuditoria = true;
+    var FS = firebase.firestore;
+    var simples = function (o) { return !!o && typeof o === 'object' && Object.getPrototypeOf(o) === Object.prototype; };
+    var marca = function (d, novo) {
+      var u = null;
+      try { u = firebase.auth().currentUser; } catch (e) {}
+      if (!u || !u.email) return d;
+      var x = Object.assign({}, d, { alteradoPor: u.email, alteradoEm: FS.FieldValue.serverTimestamp() });
+      if (novo && x.criadoPor === undefined) x.criadoPor = u.email;
+      return x;
+    };
+    var com = function (proto, nome, pos, fazNovo) {
+      if (!proto || typeof proto[nome] !== 'function') return;
+      var orig = proto[nome];
+      proto[nome] = function () {
+        var a = Array.prototype.slice.call(arguments);
+        if (simples(a[pos])) {
+          var opt = a[pos + 1];
+          a[pos] = marca(a[pos], fazNovo(opt));
+        }
+        return orig.apply(this, a);
+      };
+    };
+    var semMerge = function (opt) { return !(opt && (opt.merge || opt.mergeFields)); };
+    var nunca = function () { return false; };
+    var sempre = function () { return true; };
+    com(FS.DocumentReference && FS.DocumentReference.prototype, 'update', 0, nunca);
+    com(FS.DocumentReference && FS.DocumentReference.prototype, 'set', 0, semMerge);
+    com(FS.CollectionReference && FS.CollectionReference.prototype, 'add', 0, sempre);
+    com(FS.WriteBatch && FS.WriteBatch.prototype, 'update', 1, nunca);
+    com(FS.WriteBatch && FS.WriteBatch.prototype, 'set', 1, semMerge);
+  } catch (e) { console.warn('Registro de autoria indisponível:', e); }
+})();

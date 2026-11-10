@@ -400,6 +400,7 @@ function App() {
   const [fPrio, setFPrio] = useState("all");
   const [toast, setToast] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [restorePend, setRestorePend] = useState(null);
   const [showSum, setShowSum] = useState(false);
   const [saving, setSaving] = useState(false);
   const [stagesRaw, setStagesRaw] = useState(DEFAULT_STAGES);
@@ -420,8 +421,13 @@ function App() {
 
   useEffect(() => {
     if (!IS_CFG) { setLoading(false); setConnErr("Não foi possível iniciar o Firebase."); return; }
-    const unsub = db.collection(COL).orderBy("criadoEm", "asc").onSnapshot(
-      snap => { setOrders(snap.docs.map(d => d.data()).filter(o => !o.excluido)); setLoading(false); setConnErr(null); },
+    const unsub = db.collection(COL).onSnapshot(
+      snap => {
+        // Sem orderBy no servidor: pedidos sem "criadoEm" também aparecem. Ordena aqui, do mais antigo ao mais novo.
+        const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(o => !o.excluido);
+        lista.sort((a, b) => String(a.criadoEm || "").localeCompare(String(b.criadoEm || "")));
+        setOrders(lista); setLoading(false); setConnErr(null);
+      },
       err => { setConnErr(err.message); setLoading(false); }
     );
     return unsub;
@@ -486,7 +492,7 @@ function App() {
   }
   async function fbSet(order) {
     setSaving(true);
-    try { await db.collection(COL).doc(order.id).set(order); }
+    try { await db.collection(COL).doc(order.id).set(order, { merge: true }); }
     catch (e) { flash("Erro ao salvar: " + e.message, "err"); }
     finally { setSaving(false); }
   }
@@ -632,15 +638,24 @@ function App() {
     try {
       const data = JSON.parse(await file.text());
       const list = Array.isArray(data) ? data : data.pedidos;
-      if (!Array.isArray(list)) throw new Error("formato");
+      if (!Array.isArray(list) || list.some(o => !o || !o.id)) throw new Error("formato");
+      // Nada é gravado agora: o usuário precisa confirmar na janela abaixo.
+      const existentes = list.filter(o => orders.some(x => x.id === o.id)).length;
+      setRestorePend({ list, nome: file.name, existentes });
+    } catch (err) { flash("Arquivo de backup inválido.", "err"); }
+    e.target.value = "";
+  }
+  async function confirmRestore() {
+    const list = restorePend.list;
+    setRestorePend(null);
+    try {
       for (let i = 0; i < list.length; i += 400) {
         const batch = db.batch();
-        list.slice(i, i + 400).forEach(o => batch.set(db.collection(COL).doc(o.id), o));
+        list.slice(i, i + 400).forEach(o => batch.set(db.collection(COL).doc(o.id), o, { merge: true }));
         await batch.commit();
       }
       flash(list.length + " pedidos restaurados.");
-    } catch (err) { flash("Arquivo de backup inválido.", "err"); }
-    e.target.value = "";
+    } catch (err) { flash("Erro ao restaurar: " + err.message, "err"); }
   }
 
   /* ----- Derivados ----- */
@@ -855,6 +870,22 @@ function App() {
       {modal === "detail" && detailOrder && (
         <Overlay onClose={() => setModal(null)}>
           <DetailPanel o={detailOrder} onClose={() => setModal(null)} onEdit={() => openEdit(detailOrder)} onDelete={() => setConfirmDel(detailOrder.id)} />
+        </Overlay>
+      )}
+
+      {restorePend && (
+        <Overlay onClose={() => setRestorePend(null)}>
+          <div className="dlg sm" role="alertdialog" aria-modal="true" aria-label="Restaurar backup">
+            <div className="dlg-h"><h2>Restaurar backup?</h2></div>
+            <div className="dlg-b">
+              <p style={{ margin: "0 0 8px", color: "var(--ink-2)" }}>O arquivo <b>{restorePend.nome}</b> tem <b>{restorePend.list.length}</b> pedido(s).</p>
+              <p style={{ margin: 0, color: "var(--ink-2)" }}>{restorePend.existentes > 0 ? ("Em " + restorePend.existentes + " deles, os dados do arquivo vão substituir os dados atuais do pedido (alterações feitas depois do backup nesses campos serão perdidas). ") : ""}Pedidos que não estão no arquivo não são alterados. Se tiver dúvida, cancele e salve um backup atual antes.</p>
+            </div>
+            <div className="dlg-f">
+              <button className="btn" onClick={() => setRestorePend(null)}>Cancelar</button>
+              <button className="btn primary" onClick={confirmRestore}>Restaurar</button>
+            </div>
+          </div>
         </Overlay>
       )}
 
